@@ -6,7 +6,7 @@ WORKDIR /var/www/html
 RUN apt-get update \
     &&  apt-get install -y --no-install-recommends \
         locales apt-utils git libicu-dev g++ libpng-dev libxml2-dev libzip-dev libonig-dev libxslt-dev unzip libpq-dev nodejs npm wget \
-        apt-transport-https lsb-release ca-certificates vim
+        apt-transport-https lsb-release ca-certificates vim build-essential libsasl2-dev libssl-dev python-is-python3 zlib1g-dev
 
 
 RUN echo "en_US.UTF-8 UTF-8" > /etc/locale.gen  \
@@ -19,18 +19,36 @@ RUN curl -sS https://getcomposer.org/installer | php -- \
 #RUN curl -sS https://get.symfony.com/cli/installer | bash \
 #    &&  mv /root/.symfony/bin/symfony /usr/local/bin
 RUN curl -1sLf 'https://dl.cloudsmith.io/public/symfony/stable/setup.deb.sh' |  bash &&  apt install symfony-cli
+RUN git config --global user.email ${gitemail} \
+    &&  git config --global user.name ${gituser}
+
+ENV LIBRDKAFKA_VERSION master
+
+RUN cd /tmp \
+    && git clone \
+        --branch ${LIBRDKAFKA_VERSION} \
+        --depth 1 \
+        https://github.com/edenhill/librdkafka.git \
+    && cd librdkafka \
+    && ./configure \
+    && make \
+    && make install \
+    && pecl install rdkafka \
+    && rm -rf /tmp/librdkafka \
+    && apt-get purge \
+        -y --auto-remove \
+        -o APT::AutoRemove::RecommendsImportant=false
+
 
 RUN docker-php-ext-configure \
             intl \
     &&  docker-php-ext-install \
             pdo pdo_mysql pdo_pgsql opcache intl zip calendar dom mbstring gd xsl
 
-RUN pecl install apcu xdebug && docker-php-ext-enable apcu xdebug
+RUN pecl install apcu xdebug && docker-php-ext-enable apcu xdebug  rdkafka
 
 #RUN npm install --global yarn
 
-RUN git config --global user.email ${gitemail} \
-    &&  git config --global user.name ${gituser}
 
 CMD tail -f /dev/null
 COPY ./entrypoint.sh /
